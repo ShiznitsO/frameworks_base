@@ -867,33 +867,6 @@ final class DefaultPermissionGrantPolicy {
             PackageParser.Package fiPackage = getDefaultProviderAuthorityPackageLPr(
                     "com.google.android.apps.tycho", userId);
             if (fiPackage != null) {
-                grantRuntimePermissionsLPw(fiPackage, CONTACTS_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(fiPackage, PHONE_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(fiPackage, MICROPHONE_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(fiPackage, LOCATION_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(fiPackage, SMS_PERMISSIONS, true, userId);
-            }
-            // ContactsProvider2
-            PackageParser.Package conpro2Package = getDefaultProviderAuthorityPackageLPr(
-                    "com.android.providers.contacts.ContactsProvider2", userId);
-            if (conpro2Package != null) {
-                grantRuntimePermissionsLPw(conpro2Package, CONTACTS_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(conpro2Package, STORAGE_PERMISSIONS, true, userId);
-            }
-
-            // Google Calendar
-            PackageParser.Package googlecalendarPackage = getSystemPackageLPr(
-                    "com.google.android.calendar");
-            if (googlecalendarPackage != null && doesPackageSupportRuntimePermissions(googlecalendarPackage)) {
-                grantRuntimePermissionsLPw(googlecalendarPackage, CALENDAR_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(googlecalendarPackage, CONTACTS_PERMISSIONS, true, userId);
-                grantRuntimePermissionsLPw(googlecalendarPackage, PHONE_PERMISSIONS, userId);
-            }
-
-            // Project Fi
-            PackageParser.Package fiPackage = getDefaultProviderAuthorityPackageLPr(
-                    "com.google.android.apps.tycho", userId);
-            if (fiPackage != null) {
                 grantRuntimePermissionsLPw(fiPackage, CONTACTS_PERMISSIONS, userId);
                 grantRuntimePermissionsLPw(fiPackage, PHONE_PERMISSIONS, userId);
                 grantRuntimePermissionsLPw(fiPackage, MICROPHONE_PERMISSIONS, userId);
