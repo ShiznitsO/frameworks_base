@@ -447,7 +447,8 @@ class TaskStackViewTouchHandler implements SwipeHelper.Callback {
     @Override
     public View getChildAtPosition(MotionEvent ev) {
         TaskView tv = findViewAtPoint((int) ev.getX(), (int) ev.getY());
-        if (tv != null && canChildBeDismissed(tv)) {
+        if (tv != null && (canChildBeDismissed(tv)
+                || Recents.sLockedTasks.contains(tv.getTask()))) {
             return tv;
         }
         return null;
@@ -458,7 +459,7 @@ class TaskStackViewTouchHandler implements SwipeHelper.Callback {
         // Disallow dismissing an already dismissed task
         TaskView tv = (TaskView) v;
         Task task = tv.getTask();
-        return !mSwipeHelperAnimations.containsKey(v) &&
+        return !mSwipeHelperAnimations.containsKey(v) && 
                 (mSv.getStack().indexOfStackTask(task) != -1);
     }
 

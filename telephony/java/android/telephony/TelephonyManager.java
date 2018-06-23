@@ -5180,6 +5180,17 @@ public class TelephonyManager {
         }
     }
 
+    /**
+     * {@hide}
+     */
+    public void toggleLTE(boolean on) {
+        try {
+            getITelephony().toggleLTE(on);
+        } catch (RemoteException e) {
+            //Silently fail
+        }
+    }
+
     /** @hide */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.CALL_PHONE)
@@ -5856,6 +5867,24 @@ public class TelephonyManager {
        }
    }
 
+   /**
+    * Returns the IMS Registration Status
+    * using subId
+    * @hide
+    */
+   public boolean isImsRegisteredForSubscriber(int subId) {
+       try {
+           ITelephony telephony = getITelephony();
+           if (telephony == null)
+               return false;
+           return telephony.isImsRegisteredForSubscriber(subId);
+       } catch (RemoteException ex) {
+           return false;
+       } catch (NullPointerException ex) {
+           return false;
+       }
+   }
+
     /**
      * Returns the Status of Volte
      * @hide
@@ -6078,6 +6107,12 @@ public class TelephonyManager {
         if (SubscriptionManager.isValidPhoneId(phoneId)) {
             String prop = TelephonyProperties.PROPERTY_BASEBAND_VERSION +
                     ((phoneId == 0) ? "" : Integer.toString(phoneId));
+            if (version != null && version.length() > SystemProperties.PROP_VALUE_MAX) {
+                Log.e(TAG, "setBasebandVersionForPhone(): version string '" + version +
+                        "' too long! (" + version.length() +
+                        " > " + SystemProperties.PROP_VALUE_MAX + ")");
+                version = version.substring(0, SystemProperties.PROP_VALUE_MAX);
+            }
             SystemProperties.set(prop, version);
         }
     }

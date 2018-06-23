@@ -407,6 +407,16 @@ public final class PowerManager {
 
     /**
      * The value to pass as the 'reason' argument to reboot() to reboot into
+     * bootloader mode if you need to get to the choppa (cit)
+     * <p>
+     * Requires {@link android.Manifest.permission#REBOOT}).
+     * </p>
+     * @hide
+     */
+    public static final String REBOOT_BOOTLOADER = "bootloader";
+
+    /**
+     * The value to pass as the 'reason' argument to reboot() to reboot into
      * recovery mode for applying system updates.
      * <p>
      * Requires the {@link android.Manifest.permission#RECOVERY}
@@ -1516,5 +1526,27 @@ public final class PowerManager {
                 }
             };
         }
+    }
+
+    /**
+     * Gets the default button brightness value.
+     * @hide
+     */
+    public int getDefaultButtonBrightness() {
+        return mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_buttonBrightnessSettingDefault);
+    }
+
+    /**
+     * @hide
+     */
+    public String getSeenWakeLocks() {
+        try {
+            if (mService != null) {
+                return mService.getSeenWakeLocks();
+            }
+        } catch (RemoteException e) {
+        }
+        return null;
     }
 }

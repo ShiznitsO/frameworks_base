@@ -175,7 +175,7 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
     private boolean isLight(int vis, int barMode, int flag) {
         boolean isTransparentBar = (barMode == MODE_TRANSPARENT
                 || barMode == MODE_LIGHTS_OUT_TRANSPARENT);
-        boolean allowLight = isTransparentBar && !mBatteryController.isPowerSave();
+        boolean allowLight = isTransparentBar && (!mBatteryController.isPowerSave() || mBatteryController.isPowerSave() && !mBatteryController.isBatterySaverWarningColor());
         boolean light = (vis & flag) != 0;
         return allowLight && light;
     }
@@ -264,8 +264,10 @@ public class LightBarController implements BatteryController.BatteryStateChangeC
         pw.println(" StatusBarTransitionsController:");
         mStatusBarIconController.getTransitionsController().dump(fd, pw, args);
         pw.println();
-        pw.println(" NavigationBarTransitionsController:");
-        mNavigationBarController.dump(fd, pw, args);
-        pw.println();
+        if (mNavigationBarController != null) {
+            pw.println(" NavigationBarTransitionsController:");
+            mNavigationBarController.dump(fd, pw, args);
+            pw.println();
+        }
     }
 }

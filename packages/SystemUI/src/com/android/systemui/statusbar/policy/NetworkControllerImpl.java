@@ -868,6 +868,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                             datatype.equals("e") ? TelephonyIcons.E :
                             datatype.equals("g") ? TelephonyIcons.G :
                             datatype.equals("h") ? TelephonyIcons.H :
+                            datatype.equals("hp") ? TelephonyIcons.HP :
                             datatype.equals("lte") ? TelephonyIcons.LTE :
                             datatype.equals("lte+") ? TelephonyIcons.LTE_PLUS :
                             datatype.equals("dis") ? TelephonyIcons.DATA_DISABLED :
@@ -972,6 +973,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hideLtePlus = false;
         boolean hspaDataDistinguishable;
         boolean inflateSignalStrengths = false;
+        boolean hspapDataDistinguishable;
+        boolean showRat;
 
         static Config readConfig(Context context) {
             Config config = new Config();
@@ -985,6 +988,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     res.getBoolean(R.bool.config_hspa_data_distinguishable);
             config.hideLtePlus = res.getBoolean(R.bool.config_hideLtePlus);
             config.inflateSignalStrengths = res.getBoolean(R.bool.config_inflateSignalStrength);
+            config.hspapDataDistinguishable =
+                    res.getBoolean(R.bool.config_hspap_data_distinguishable);
+            config.showRat =
+                    res.getBoolean(com.android.internal.R.bool.config_display_rat);
             return config;
         }
     }

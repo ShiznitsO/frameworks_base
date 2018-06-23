@@ -351,6 +351,8 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.Xml;
+import android.util.BoostFramework;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -506,7 +508,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // Amount of time after a call to stopAppSwitches() during which we will
     // prevent further untrusted switches from happening.
-    static final long APP_SWITCH_DELAY_TIME = 5*1000;
+    static final long APP_SWITCH_DELAY_TIME = 1*1000;
 
     // How long we wait for a launched process to attach to the activity manager
     // before we decide it's never going to come up for real.
@@ -1848,11 +1850,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             } break;
             case SHOW_FINGERPRINT_ERROR_UI_MSG: {
                 if (mShowDialogs) {
+                    String buildfingerprint = SystemProperties.get("ro.build.fingerprint");
+                    String[] splitfingerprint = buildfingerprint.split("/");
+                    String vendorid = splitfingerprint[3];
                     AlertDialog d = new BaseErrorDialog(mUiContext);
                     d.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ERROR);
                     d.setCancelable(false);
                     d.setTitle(mUiContext.getText(R.string.android_system_label));
-                    d.setMessage(mUiContext.getText(R.string.system_error_manufacturer));
+                    d.setMessage(mUiContext.getString(R.string.system_error_vendorprint, vendorid));
                     d.setButton(DialogInterface.BUTTON_POSITIVE, mUiContext.getText(R.string.ok),
                             obtainMessage(DISMISS_DIALOG_UI_MSG, d));
                     d.show();
@@ -3980,6 +3985,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 buf.append(hostingNameStr);
             }
             Slog.i(TAG, buf.toString());
+
+            if(hostingType.equals("activity")) {
+                BoostFramework perf = new BoostFramework();
+
+                if (perf != null) {
+                    perf.perfIOPrefetchStart(startResult.pid,app.processName);
+                }
+            }
+
             app.setPid(startResult.pid);
             app.usingWrapper = startResult.usingWrapper;
             app.removed = false;

@@ -201,6 +201,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
@@ -330,6 +331,11 @@ public class NotificationManagerService extends SystemService {
 
     // The last key in this list owns the hardware.
     ArrayList<String> mLights = new ArrayList<>();
+
+    @GuardedBy("mNotificationLock")
+    private HashMap<String, Long> mAnnoyingNotifications = new HashMap<String, Long>();
+
+    private long mAnnoyingNotificationThreshold = -1;
 
     private AppOpsManager mAppOps;
     private UsageStatsManagerInternal mAppUsageStats;
@@ -1021,6 +1027,8 @@ public class NotificationManagerService extends SystemService {
                 = Settings.System.getUriFor(Settings.System.NOTIFICATION_LIGHT_PULSE);
         private final Uri NOTIFICATION_RATE_LIMIT_URI
                 = Settings.Global.getUriFor(Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE);
+        private final Uri MUTE_ANNOYING_NOTIFICATIONS_THRESHOLD_URI
+                = Settings.System.getUriFor(Settings.System.MUTE_ANNOYING_NOTIFICATIONS_THRESHOLD);
 
         SettingsObserver(Handler handler) {
             super(handler);
@@ -1034,6 +1042,8 @@ public class NotificationManagerService extends SystemService {
                     false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(NOTIFICATION_RATE_LIMIT_URI,
                     false, this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(MUTE_ANNOYING_NOTIFICATIONS_THRESHOLD_URI,
+                    false, this, UserHandle.USER_ALL);
             update(null);
         }
 
@@ -1045,7 +1055,7 @@ public class NotificationManagerService extends SystemService {
             ContentResolver resolver = getContext().getContentResolver();
             if (uri == null || NOTIFICATION_LIGHT_PULSE_URI.equals(uri)) {
                 boolean pulseEnabled = Settings.System.getIntForUser(resolver,
-                            Settings.System.NOTIFICATION_LIGHT_PULSE, 0, UserHandle.USER_CURRENT) != 0;
+                            Settings.System.NOTIFICATION_LIGHT_PULSE, 1, UserHandle.USER_CURRENT) != 0;
                 if (mNotificationPulseEnabled != pulseEnabled) {
                     mNotificationPulseEnabled = pulseEnabled;
                     updateNotificationPulse();
@@ -1057,6 +1067,11 @@ public class NotificationManagerService extends SystemService {
             }
             if (uri == null || NOTIFICATION_BADGING_URI.equals(uri)) {
                 mRankingHelper.updateBadgingEnabled();
+            }
+            if (uri == null || MUTE_ANNOYING_NOTIFICATIONS_THRESHOLD_URI.equals(uri)) {
+                mAnnoyingNotificationThreshold = Settings.System.getLongForUser(resolver,
+                       Settings.System.MUTE_ANNOYING_NOTIFICATIONS_THRESHOLD, 0,
+                       UserHandle.USER_CURRENT);
             }
         }
     }
@@ -3037,6 +3052,16 @@ public class NotificationManagerService extends SystemService {
                 throws RemoteException {
             new ShellCmd().exec(this, in, out, err, args, callback, resultReceiver);
         }
+
+        @Override
+        public void forceShowLedLight(int color) {
+            forceShowLed(color);
+        }
+
+        @Override
+        public void forcePulseLedLight(int color, int onTime, int offTime) {
+            forcePulseLed(color, onTime, offTime);
+        }
     };
 
     private void applyAdjustment(NotificationRecord r, Adjustment adjustment) {
@@ -3552,7 +3577,7 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void doChannelWarningToast(CharSequence toastText) {
-        final int defaultWarningEnabled = Build.IS_DEBUGGABLE ? 1 : 0;
+        final int defaultWarningEnabled = 0;
         final boolean warningEnabled = Settings.Global.getInt(getContext().getContentResolver(),
                 Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS, defaultWarningEnabled) != 0;
         if (warningEnabled) {
@@ -3942,6 +3967,27 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
+    @GuardedBy("mNotificationLock")
+    private boolean notificationIsAnnoying(String key, String pkg) {
+        if (key == null
+                || mAnnoyingNotificationThreshold <= 0
+                || (pkg != null && "android".equals(pkg))) {
+            return false;
+        }
+
+        long currentTime = System.currentTimeMillis();
+        if (mAnnoyingNotifications.containsKey(key)
+                && (currentTime - mAnnoyingNotifications.get(key)
+                < mAnnoyingNotificationThreshold)) {
+            // less than threshold; it's an annoying notification!!
+            return true;
+        } else {
+            // not in map or time to re-add
+            mAnnoyingNotifications.put(key, currentTime);
+            return false;
+        }
+    }
+
     /**
      * Ensures that grouped notification receive their special treatment.
      *
@@ -4017,6 +4063,7 @@ public class NotificationManagerService extends SystemService {
 
         final Notification notification = record.sbn.getNotification();
         final String key = record.getKey();
+        final String pkg = record.sbn.getPackageName();
 
         // Should this notification make noise, vibe, or use the LED?
         final boolean aboveThreshold =
@@ -4038,7 +4085,7 @@ public class NotificationManagerService extends SystemService {
 
         if (aboveThreshold && isNotificationForCurrentUser(record)) {
 
-            if (mSystemReady && mAudioManager != null) {
+            if (mSystemReady && mAudioManager != null && !notificationIsAnnoying(key, pkg)) {
                 Uri soundUri = record.getSound();
                 hasValidSound = soundUri != null && !Uri.EMPTY.equals(soundUri);
                 long[] vibration = record.getVibration();
@@ -4095,7 +4142,8 @@ public class NotificationManagerService extends SystemService {
         boolean wasShowLights = mLights.remove(key);
         if (record.getLight() != null && aboveThreshold
                 && ((record.getSuppressedVisualEffects()
-                & NotificationListenerService.SUPPRESSED_EFFECT_SCREEN_OFF) == 0)) {
+                & NotificationListenerService.SUPPRESSED_EFFECT_SCREEN_OFF) == 0)
+                && (!record.isIntercepted() || (record.isIntercepted() && record.shouldLightOnZen()))) {
             mLights.add(key);
             updateLightsLocked();
             if (mUseAttentionLight) {
@@ -4111,6 +4159,24 @@ public class NotificationManagerService extends SystemService {
                     .setType(MetricsEvent.TYPE_OPEN)
                     .setSubtype((buzz ? 1 : 0) | (beep ? 2 : 0) | (blink ? 4 : 0)));
             EventLogTags.writeNotificationAlert(key, buzz ? 1 : 0, beep ? 1 : 0, blink ? 1 : 0);
+        }
+    }
+
+    private void forceShowLed(int color) {
+        if (color != -1) {
+            mNotificationLight.turnOff();
+            mNotificationLight.setColor(color);
+        } else {
+            mNotificationLight.turnOff();
+        }
+    }
+
+    private void forcePulseLed(int color, int onTime, int offTime) {
+        if (color != -1) {
+            mNotificationLight.turnOff();
+            mNotificationLight.setFlashing(color, Light.LIGHT_FLASH_TIMED, onTime, offTime);
+        } else {
+            mNotificationLight.turnOff();
         }
     }
 

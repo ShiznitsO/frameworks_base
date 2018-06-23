@@ -93,6 +93,9 @@ public class CellularTile extends QSTileImpl<SignalState> {
 
     @Override
     public void handleSetListening(boolean listening) {
+        if (mController == null) {
+            return;
+        }
         if (listening) {
             mController.addCallback(mSignalCallback);
         } else {
@@ -112,15 +115,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
 
     @Override
     protected void handleClick() {
-        if (mDataController.isMobileDataEnabled()) {
-            if (mKeyguardMonitor.isSecure() && !mKeyguardMonitor.canSkipBouncer()) {
-                mActivityStarter.postQSRunnableDismissingKeyguard(this::showDisableDialog);
-            } else {
-                mUiHandler.post(this::showDisableDialog);
-            }
-        } else {
-            mDataController.setMobileDataEnabled(true);
-        }
+        mDataController.setMobileDataEnabled(!mDataController.isMobileDataEnabled());
     }
 
     private void showDisableDialog() {
@@ -157,6 +152,9 @@ public class CellularTile extends QSTileImpl<SignalState> {
 
     @Override
     protected void handleUpdateState(SignalState state, Object arg) {
+        if (mSignalCallback == null) {
+            return;
+        }
         CallbackInfo cb = (CallbackInfo) arg;
         if (cb == null) {
             cb = mSignalCallback.mInfo;
@@ -244,7 +242,7 @@ public class CellularTile extends QSTileImpl<SignalState> {
         @Override
         public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
                 int qsType, boolean activityIn, boolean activityOut, String typeContentDescription,
-                String description, boolean isWide, int subId, boolean roaming) {
+                String description, boolean isWide, int subId, boolean roaming, boolean isMobileIms) {
             if (qsIcon == null) {
                 // Not data sim, don't display.
                 return;

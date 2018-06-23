@@ -27,7 +27,11 @@ import com.android.internal.telephony.TelephonyProperties;
 
 import dalvik.system.VMRuntime;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Information about the current build, extracted from system properties.
@@ -52,6 +56,11 @@ public class Build {
 
     /** The name of the underlying board, like "goldfish". */
     public static final String BOARD = getString("ro.product.board");
+
+    /** The build date
+     * @hide
+     */
+    public static final String DATE = getString("ro.build.date");
 
     /**
      * The name of the instruction set (CPU type + ABI convention) of native code.
@@ -778,6 +787,7 @@ public class Build {
 
     /** The type of build, like "user" or "eng". */
     public static final String TYPE = getString("ro.build.type");
+    private static String TYPE_FOR_APPS = parseBuildTypeFromFingerprint();
 
     /** Comma-separated tags describing the build, like "unsigned,debug". */
     public static final String TAGS = getString("ro.build.tags");
@@ -804,6 +814,42 @@ public class Build {
         return finger;
     }
 
+    // Some apps like to compare the build type embedded in fingerprint
+    // to the actual build type. As the fingerprint in our case is almost
+    // always hardcoded to the stock ROM fingerprint, provide that instead
+    // of the actual one if possible.
+    private static String parseBuildTypeFromFingerprint() {
+        final String fingerprint = SystemProperties.get("ro.build.fingerprint");
+        if (TextUtils.isEmpty(fingerprint)) {
+            return null;
+        }
+        Pattern fingerprintPattern =
+                Pattern.compile("(.*)\\/(.*)\\/(.*):(.*)\\/(.*)\\/(.*):(.*)\\/(.*)");
+        Matcher matcher = fingerprintPattern.matcher(fingerprint);
+        return matcher.matches() ? matcher.group(7) : null;
+    }
+
+    /** @hide */
+    public static void adjustBuildTypeIfNeeded() {
+        if (Process.isApplicationUid(Process.myUid()) && !TextUtils.isEmpty(TYPE_FOR_APPS)) {
+            try {
+                // This is sick. TYPE is final (which can't be changed because it's an API
+                // guarantee), but we have to reassign it. Resort to reflection to unset the
+                // final modifier, change the value and restore the final modifier afterwards.
+                Field typeField = Build.class.getField("TYPE");
+                Field accessFlagsField = Field.class.getDeclaredField("accessFlags");
+                accessFlagsField.setAccessible(true);
+                int currentFlags = accessFlagsField.getInt(typeField);
+                accessFlagsField.setInt(typeField, currentFlags & ~Modifier.FINAL);
+                typeField.set(null, TYPE_FOR_APPS);
+                accessFlagsField.setInt(typeField, currentFlags);
+                accessFlagsField.setAccessible(false);
+            } catch (Exception e) {
+                // shouldn't happen, but we don't want to crash the app even if it does happen
+            }
+        }
+    }
+
     /**
      * Ensure that raw fingerprint system property is defined. If it was derived
      * dynamically by {@link #deriveFingerprint()} this is where we push the
@@ -822,20 +868,8 @@ public class Build {
     }
 
     /**
-     * True if Treble is enabled and required for this device.
-     *
-     * @hide
-     */
-    public static final boolean IS_TREBLE_ENABLED =
-        SystemProperties.getBoolean("ro.treble.enabled", false);
-
-    /**
-     * Verifies the current flash of the device is consistent with what
+     * Verifies the the current flash of the device is consistent with what
      * was expected at build time.
-     *
-     * Treble devices will verify the Vendor Interface (VINTF). A device
-     * launched without Treble:
-     *
      * 1) Checks that device fingerprint is defined and that it matches across
      *    various partitions.
      * 2) Verifies radio and bootloader partitions are those expected in the build.
@@ -845,17 +879,6 @@ public class Build {
     public static boolean isBuildConsistent() {
         // Don't care on eng builds.  Incremental build may trigger false negative.
         if (IS_ENG) return true;
-
-        if (IS_TREBLE_ENABLED) {
-            int result = VintfObject.verify(new String[0]);
-
-            if (result != 0) {
-                Slog.e(TAG, "Vendor interface is incompatible, error="
-                        + String.valueOf(result));
-            }
-
-            return result == 0;
-        }
 
         final String system = SystemProperties.get("ro.build.fingerprint");
         final String vendor = SystemProperties.get("ro.vendor.build.fingerprint");

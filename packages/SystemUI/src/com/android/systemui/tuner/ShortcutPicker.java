@@ -21,6 +21,7 @@ import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Process;
 import android.support.v14.preference.PreferenceFragment;
@@ -29,6 +30,7 @@ import android.support.v7.preference.PreferenceCategory;
 import android.support.v7.preference.PreferenceScreen;
 import android.support.v7.preference.PreferenceViewHolder;
 
+import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.tuner.ShortcutParser.Shortcut;
@@ -41,8 +43,9 @@ public class ShortcutPicker extends PreferenceFragment implements Tunable {
 
     private final ArrayList<SelectablePreference> mSelectablePreferences = new ArrayList<>();
     private String mKey;
-    private SelectablePreference mNonePreference;
+    private SelectablePreference mDefaultPreference;
     private TunerService mTunerService;
+    private HiddenPreference mHiddenPreference;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -51,12 +54,27 @@ public class ShortcutPicker extends PreferenceFragment implements Tunable {
         screen.setOrderingAsAdded(true);
         PreferenceCategory otherApps = new PreferenceCategory(context);
         otherApps.setTitle(R.string.tuner_other_apps);
+        mKey = getArguments().getString(ARG_PREFERENCE_ROOT);
 
-        mNonePreference = new SelectablePreference(context);
-        mSelectablePreferences.add(mNonePreference);
-        mNonePreference.setTitle(R.string.lockscreen_none);
-        mNonePreference.setIcon(R.drawable.ic_remove_circle);
-        screen.addPreference(mNonePreference);
+        mHiddenPreference = new HiddenPreference(context);
+        mSelectablePreferences.add(mHiddenPreference);
+        mHiddenPreference.setTitle(R.string.lockscreen_hidden);
+        mHiddenPreference.setIcon(R.drawable.ic_remove_circle);
+        screen.addPreference(mHiddenPreference);
+
+        mDefaultPreference = new SelectablePreference(context);
+        mSelectablePreferences.add(mDefaultPreference);
+        mDefaultPreference.setTitle(R.string.lockscreen_default);
+        screen.addPreference(mDefaultPreference);
+        if (LOCKSCREEN_LEFT_BUTTON.equals(mKey)) {
+            Drawable d = context.getDrawable(R.drawable.ic_mic_26dp);
+            d.mutate().setTint(Utils.getColorAttr(context, android.R.attr.textColorPrimary));
+            mDefaultPreference.setIcon(d);
+        } else {
+            Drawable d = context.getDrawable(R.drawable.ic_camera_alt_24dp);
+            d.mutate().setTint(Utils.getColorAttr(context, android.R.attr.textColorPrimary));
+            mDefaultPreference.setIcon(d);
+        }
 
         LauncherApps apps = getContext().getSystemService(LauncherApps.class);
         List<LauncherActivityInfo> activities = apps.getActivityList(null,
@@ -97,7 +115,6 @@ public class ShortcutPicker extends PreferenceFragment implements Tunable {
         //screen.addPreference(otherApps);
 
         setPreferenceScreen(screen);
-        mKey = getArguments().getString(ARG_PREFERENCE_ROOT);
         mTunerService = Dependency.get(TunerService.class);
         mTunerService.addTunable(this, mKey);
     }
@@ -195,6 +212,18 @@ public class ShortcutPicker extends PreferenceFragment implements Tunable {
         @Override
         public String toString() {
             return mShortcut.toString();
+        }
+    }
+
+    private static class HiddenPreference extends SelectablePreference {
+
+        public HiddenPreference(Context context) {
+            super(context);
+        }
+
+        @Override
+        public String toString() {
+            return "none";
         }
     }
 }

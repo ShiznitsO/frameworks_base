@@ -271,8 +271,16 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         holder.mTileView.setAppLabel(info.appLabel);
         holder.mTileView.setShowAppLabel(position > mEditIndex && !info.isSystem);
 
+        final boolean selectable = !mAccessibilityMoving || position < mEditIndex;
+        if (!(mAccessibilityManager.isTouchExplorationEnabled() && selectable)) {
+            holder.mTileView.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    move(holder.getAdapterPosition(), mEditIndex, holder.mTileView);
+                }
+            });
+        }
         if (mAccessibilityManager.isTouchExplorationEnabled()) {
-            final boolean selectable = !mAccessibilityMoving || position < mEditIndex;
             holder.mTileView.setClickable(selectable);
             holder.mTileView.setFocusable(selectable);
             holder.mTileView.setImportantForAccessibility(selectable
@@ -464,13 +472,21 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         }
     }
 
-    private final SpanSizeLookup mSizeLookup = new SpanSizeLookup() {
+    private final DynamicSpanSizeLookup mSizeLookup = new DynamicSpanSizeLookup();
+
+    private class DynamicSpanSizeLookup extends SpanSizeLookup {
+        private int mColumns = 5;
+
+        public void setColumns(int columns) {
+            mColumns = columns;
+        }
+
         @Override
         public int getSpanSize(int position) {
             final int type = getItemViewType(position);
-            return type == TYPE_EDIT || type == TYPE_DIVIDER ? 3 : 1;
+            return type == TYPE_EDIT || type == TYPE_DIVIDER ? mColumns : 1;
         }
-    };
+    }
 
     private class TileItemDecoration extends ItemDecoration {
         private final ColorDrawable mDrawable;
@@ -575,4 +591,8 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         public void onSwiped(ViewHolder viewHolder, int direction) {
         }
     };
+
+    public void setColumns(int columns) {
+        mSizeLookup.setColumns(columns);
+    }
 }

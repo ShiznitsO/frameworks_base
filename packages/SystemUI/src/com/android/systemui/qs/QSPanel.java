@@ -16,17 +16,24 @@
 
 package com.android.systemui.qs;
 
+import static android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL;
 import static com.android.systemui.qs.tileimpl.QSTileImpl.getColorForState;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.ContentResolver;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.Message;
+import android.os.UserHandle;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
@@ -56,11 +63,14 @@ import java.util.Collection;
 /** View that represents the quick settings tile panel. **/
 public class QSPanel extends LinearLayout implements Tunable, Callback, BrightnessMirrorListener {
 
+    private static final String TAG = "QSPanel";
+
     public static final String QS_SHOW_BRIGHTNESS = "qs_show_brightness";
 
     protected final Context mContext;
     protected final ArrayList<TileRecord> mRecords = new ArrayList<TileRecord>();
     protected final View mBrightnessView;
+    protected final ImageView mBrightnessIcon;
     private final H mHandler = new H();
     private final View mPageIndicator;
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
@@ -85,19 +95,93 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private BrightnessMirrorController mBrightnessMirrorController;
     private View mDivider;
 
+    private final Vibrator mVibrator;
+
     public QSPanel(Context context) {
         this(context, null);
     }
 
-    public QSPanel(Context context, AttributeSet attrs) {
+    public QSPanel(final Context context, AttributeSet attrs) {
         super(context, attrs);
         mContext = context;
-
+        ContentResolver resolver = context.getContentResolver();
+        mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
         setOrientation(VERTICAL);
 
         mBrightnessView = LayoutInflater.from(context).inflate(
                 R.layout.quick_settings_brightness_dialog, this, false);
-        addView(mBrightnessView);
+
+        mBrightnessIcon = (ImageView) mBrightnessView.findViewById(R.id.brightness_icon);
+
+        mBrightnessController = new BrightnessController(context,
+                mBrightnessIcon,
+                mBrightnessView.findViewById(R.id.brightness_slider));
+
+        ImageView mMinBrightness = mBrightnessView.findViewById(R.id.brightness_left);
+        mMinBrightness.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean adaptive = isAdaptiveBrightness(context);
+                if (adaptive) {
+                    float currentValue = Settings.System.getFloat(resolver,
+                            Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, 0f);
+                    float brightness = currentValue - 0.04f;
+                    if (currentValue != -1.0f) {
+                        Settings.System.putFloat(resolver,
+                                Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, Math.max(-1.0f, brightness));
+                    }
+                } else {
+                    int currentValue = Settings.System.getInt(resolver,
+                            Settings.System.SCREEN_BRIGHTNESS, 0);
+                    int brightness = currentValue - 10;
+                    if (currentValue != 0) {
+                        Settings.System.putInt(resolver,
+                                Settings.System.SCREEN_BRIGHTNESS, Math.max(0, brightness));
+                    }
+                }
+            }
+        });
+        mMinBrightness.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                setBrightnessMin(context, isAdaptiveBrightness(context));
+                mVibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
+                return false;
+            }
+        });
+
+        ImageView mMaxBrightness = mBrightnessView.findViewById(R.id.brightness_right);
+        mMaxBrightness.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                boolean adaptive = isAdaptiveBrightness(context);
+                if (adaptive) {
+                    float currentValue = Settings.System.getFloat(resolver,
+                            Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, 0f);
+                    float brightness = currentValue + 0.04f;
+                    if (currentValue != 1.0f) {
+                        Settings.System.putFloat(resolver,
+                                Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, Math.min(1.0f, brightness));
+                    }
+                } else {
+                    int currentValue = Settings.System.getInt(resolver,
+                            Settings.System.SCREEN_BRIGHTNESS, 0);
+                    int brightness = currentValue + 10;
+                    if (currentValue != 255) {
+                        Settings.System.putInt(resolver,
+                                Settings.System.SCREEN_BRIGHTNESS, Math.min(255, brightness));
+                    }
+                }
+            }
+        });
+        mMaxBrightness.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                setBrightnessMax(context, isAdaptiveBrightness(context));
+                mVibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE));
+                return false;
+            }
+        });
 
         setupTileLayout();
 
@@ -108,6 +192,11 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             ((PagedTileLayout) mTileLayout).setPageIndicator((PageIndicator) mPageIndicator);
         }
 
+        mBrightnessView.setPadding(mBrightnessView.getPaddingLeft(),
+                mBrightnessView.getPaddingTop(), mBrightnessView.getPaddingRight(),
+                mContext.getResources().getDimensionPixelSize(R.dimen.qs_brightness_footer_padding));
+        addView(mBrightnessView);
+
         addDivider();
 
         mFooter = new QSSecurityFooter(this, context);
@@ -115,9 +204,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         updateResources();
 
-        mBrightnessController = new BrightnessController(getContext(),
-                findViewById(R.id.brightness_icon),
-                findViewById(R.id.brightness_slider));
     }
 
     protected void addDivider() {
@@ -180,9 +266,13 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     @Override
     public void onTuningChanged(String key, String newValue) {
-        if (QS_SHOW_BRIGHTNESS.equals(key)) {
-            mBrightnessView.setVisibility(newValue == null || Integer.parseInt(newValue) != 0
-                    ? VISIBLE : GONE);
+        try {
+            if (QS_SHOW_BRIGHTNESS.equals(key)) {
+                mBrightnessView.setVisibility(newValue == null || Integer.parseInt(newValue) != 0
+                        ? VISIBLE : GONE);
+            }
+        } catch (Exception e){
+            Log.d(TAG, "Caught exception from Tuner", e);
         }
     }
 
@@ -198,6 +288,14 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             }
         }
         return mHost.createTile(subPanel);
+    }
+
+    private void setBrightnessIcon() {
+        boolean brightnessIconEnabled = Settings.System.getIntForUser(
+                mContext.getContentResolver(), Settings.System.QS_SHOW_BRIGHTNESS_ICON,
+                0, UserHandle.USER_CURRENT) == 1;
+        mBrightnessIcon.setVisibility(brightnessIconEnabled ? View.VISIBLE : View.GONE);
+        updateResources();
     }
 
     public void setBrightnessMirror(BrightnessMirrorController c) {
@@ -252,6 +350,9 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         }
         if (mTileLayout != null) {
             mTileLayout.updateResources();
+        }
+        if (mCustomizePanel != null) {
+            mCustomizePanel.updateResources();
         }
     }
 
@@ -314,6 +415,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
                 mBrightnessController.unregisterCallbacks();
             }
         }
+        setBrightnessIcon();
     }
 
     public void refreshAllTiles() {
@@ -420,6 +522,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         if (mTileLayout != null) {
             mTileLayout.addTile(r);
+            configureTile(r.tile, r.tileView);
         }
 
         return r;
@@ -602,5 +705,64 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         boolean updateResources();
 
         void setListening(boolean listening);
+
+        boolean isShowTitles();
+    }
+
+    private void configureTile(QSTile t, QSTileView v) {
+        if (mTileLayout != null) {
+            if (t.isDualTarget()) {
+                if (!mTileLayout.isShowTitles()) {
+                    v.setOnLongClickListener(view -> {
+                        t.secondaryClick();
+                        mHost.openPanels();
+                        return true;
+                    });
+                } else {
+                    v.setOnLongClickListener(view -> {
+                        t.longClick();
+                        return true;
+                    });
+                }
+            }
+        }
+    }
+
+    static boolean isAdaptiveBrightness(Context context) {
+        int currentBrightnessMode = Settings.System.getInt(context.getContentResolver(),
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                SCREEN_BRIGHTNESS_MODE_MANUAL);
+        return currentBrightnessMode != Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL;
+    }
+
+    static void setBrightnessMin(Context context, boolean isAdaptive) {
+        if (isAdaptive) {
+            Settings.System.putFloat(context.getContentResolver(),
+            Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, -1.0f);
+        } else {
+            Settings.System.putInt(context.getContentResolver(),
+            Settings.System.SCREEN_BRIGHTNESS, 0);
+        }
+    }
+
+    static void setBrightnessMax(Context context, boolean isAdaptive) {
+        if (isAdaptive) {
+            Settings.System.putFloat(context.getContentResolver(),
+            Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, 1.0f);
+        } else {
+            Settings.System.putInt(context.getContentResolver(),
+            Settings.System.SCREEN_BRIGHTNESS, 255);
+        }
+    }
+
+    public void updateSettings() {
+        if (mFooter != null) {
+            mFooter.updateSettings();
+        }
+        if (mTileLayout != null) {
+            for (TileRecord r : mRecords) {
+                configureTile(r.tile, r.tileView);
+            }
+        }
     }
 }

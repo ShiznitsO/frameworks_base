@@ -219,7 +219,7 @@ public class ViewConfiguration {
     /**
      * The coefficient of friction applied to flings/scrolls.
      */
-    private static final float SCROLL_FRICTION = 0.015f;
+    private static final float SCROLL_FRICTION = 0.012f;
 
     /**
      * Max distance in dips to overscroll for edge effects
@@ -378,7 +378,7 @@ public class ViewConfiguration {
                 case HAS_PERMANENT_MENU_KEY_AUTODETECT: {
                     IWindowManager wm = WindowManagerGlobal.getWindowManagerService();
                     try {
-                        sHasPermanentMenuKey = !wm.hasNavigationBar();
+                        sHasPermanentMenuKey = wm.hasPermanentMenuKey();
                         sHasPermanentMenuKeySet = true;
                     } catch (RemoteException ex) {
                         sHasPermanentMenuKey = false;

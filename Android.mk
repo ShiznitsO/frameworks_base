@@ -279,6 +279,8 @@ LOCAL_SRC_FILES += \
 	core/java/android/os/storage/IStorageEventListener.aidl \
 	core/java/android/os/storage/IStorageShutdownObserver.aidl \
 	core/java/android/os/storage/IObbActionListener.aidl \
+	core/java/android/pocket/IPocketService.aidl \
+	core/java/android/pocket/IPocketCallback.aidl \
 	core/java/android/security/IKeystoreService.aidl \
 	core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl \
 	core/java/android/service/autofill/IAutoFillService.aidl \
@@ -556,6 +558,8 @@ LOCAL_SRC_FILES += \
 	packages/services/Proxy/com/android/net/IProxyPortListener.aidl \
 	core/java/android/service/quicksettings/IQSService.aidl \
 	core/java/android/service/quicksettings/IQSTileService.aidl \
+	telephony/java/com/android/internal/telephony/ISmsSecurityService.aidl \
+	telephony/java/com/android/internal/telephony/ISmsSecurityAgent.aidl \
 
 # The following are native binders that need to go with the native component
 # at system/update_engine/binder_bindings/. Use relative path to refer to them.
